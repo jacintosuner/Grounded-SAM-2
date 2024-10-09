@@ -17,6 +17,8 @@ def parse_args():
     parser.add_argument("--text_prompt", type=str, default="car. tire.", help="Text prompt for the model")
     parser.add_argument("--img_path", type=str, default="notebooks/images/truck.jpg", help="Path to the input image")
     parser.add_argument("--output_dir", type=str, default="outputs/grounded_sam2_local_demo", help="Directory to save the output")
+    parser.add_argument("--save_images_and_npy", action="store_true", help="Flag to save the annotated images")
+    parser.add_argument("--save_json", type=bool, default=True, help="Flag to save the results as a JSON file")
     return parser.parse_args()
 
 def main():
@@ -35,7 +37,8 @@ def main():
     TEXT_THRESHOLD = 0.25
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     OUTPUT_DIR = Path(args.output_dir)
-    DUMP_JSON_RESULTS = True
+    DUMP_JSON_RESULTS = args.save_json
+    SAVE_IMAGES_AND_NPY = args.save_images_and_npy
 
     # create output directory
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -114,23 +117,26 @@ def main():
     """
     Visualize image with supervision useful API
     """
-    img = cv2.imread(img_path)
-    detections = sv.Detections(
-        xyxy=input_boxes,  # (n, 4)
-        mask=masks.astype(bool),  # (n, h, w)
-        class_id=class_ids
-    )
+    if SAVE_IMAGES_AND_NPY:
+        img = cv2.imread(img_path)
+        detections = sv.Detections(
+            xyxy=input_boxes,  # (n, 4)
+            mask=masks.astype(bool),  # (n, h, w)
+            class_id=class_ids
+        )
 
-    box_annotator = sv.BoxAnnotator()
-    annotated_frame = box_annotator.annotate(scene=img.copy(), detections=detections)
+        box_annotator = sv.BoxAnnotator()
+        annotated_frame = box_annotator.annotate(scene=img.copy(), detections=detections)
 
-    label_annotator = sv.LabelAnnotator()
-    annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "groundingdino_annotated_image.jpg"), annotated_frame)
+        label_annotator = sv.LabelAnnotator()
+        annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
+        cv2.imwrite(os.path.join(OUTPUT_DIR, "groundingdino_annotated_image.jpg"), annotated_frame)
 
-    mask_annotator = sv.MaskAnnotator()
-    annotated_frame = mask_annotator.annotate(scene=annotated_frame, detections=detections)
-    cv2.imwrite(os.path.join(OUTPUT_DIR, "grounded_sam2_annotated_image_with_mask.jpg"), annotated_frame)
+        mask_annotator = sv.MaskAnnotator()
+        annotated_frame = mask_annotator.annotate(scene=annotated_frame, detections=detections)
+        cv2.imwrite(os.path.join(OUTPUT_DIR, "grounded_sam2_annotated_image_with_mask.jpg"), annotated_frame)
+
+        np.save(os.path.join(OUTPUT_DIR, "grounded_sam_mask.npy"), masks_combined)
 
     """
     Dump the results in standard format and save as json files
@@ -141,7 +147,6 @@ def main():
     for i, mask in enumerate(masks):
         masks_combined[mask.astype(bool)] = i + 1  # Assign a unique value to each mask
 
-    np.save(os.path.join(OUTPUT_DIR, "grounded_sam_mask.npy"), masks_combined)
 
     def single_mask_to_rle(mask):
         rle = mask_util.encode(np.array(mask[:, :, None], order="F", dtype="uint8"))[0]
@@ -171,7 +176,10 @@ def main():
             "img_height": h,
         }
         
-        with open(os.path.join(OUTPUT_DIR, "grounded_sam2_local_image_demo_results.json"), "w") as f:
+        # Modify the prompt for the filename
+        prompt_for_filename = TEXT_PROMPT.replace(".", "").replace(" ", "_")
+
+        with open(os.path.join(OUTPUT_DIR, f"grounded_sam_seg_{prompt_for_filename}.json"), "w") as f:
             json.dump(results, f, indent=4)
 
 if __name__ == "__main__":
