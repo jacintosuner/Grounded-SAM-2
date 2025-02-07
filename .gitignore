@@ -143,5 +143,7 @@ dmypy.json
 # checkpoint
 *.pth
 outputs/
+checkpoints/
+gdino_checkpoints/
 
 .idea/

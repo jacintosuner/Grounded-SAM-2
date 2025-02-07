@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Optional, Union
 
 import cv2
 import numpy as np
@@ -36,7 +36,7 @@ def load_model(model_config_path: str, model_checkpoint_path: str, device: str =
     return model
 
 
-def load_image(image_path: str) -> Tuple[np.array, torch.Tensor]:
+def load_image(image_path: Optional[str] = None, image_array: Union[np.ndarray, torch.tensor] = None) -> Tuple[np.array, torch.Tensor]:
     transform = T.Compose(
         [
             T.RandomResize([800], max_size=1333),
@@ -44,8 +44,14 @@ def load_image(image_path: str) -> Tuple[np.array, torch.Tensor]:
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ]
     )
-    image_source = Image.open(image_path).convert("RGB")
-    image = np.asarray(image_source)
+    if image_path is not None:
+        image_source = Image.open(image_path).convert("RGB")
+        image = np.asarray(image_source)
+    elif image_array is not None:
+        if isinstance(image_array, torch.Tensor):
+            image_array = image_array.cpu().numpy()
+        image_source = Image.fromarray(image_array)
+        image = image_array.copy()
     image_transformed, _ = transform(image_source, None)
     return image, image_transformed
 
