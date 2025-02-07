@@ -294,7 +294,7 @@ class GSAM2:
             mask_img = np.squeeze(mask) * 255
             cv2.imwrite(os.path.join(output_path, f"mask_{i}.png"), mask_img)
     
-    def visualize(self, video_path, masks, confidences, labels, input_boxes, frame = 0):
+    def visualize_video_frame_masks(self, video_path, masks, confidences, labels, input_boxes, frame = 0):
 
         """
         Post-process the output of the model to get the masks, scores, and logits for visualization
@@ -361,8 +361,6 @@ class GSAM2:
 
         class_ids = np.array(list(range(len(class_names))))
 
-        print("BLAAA")
-        print(class_names, confidences)
         labels = [
             f"{class_name} {confidence:.2f}"
             for class_name, confidence
@@ -394,6 +392,11 @@ class GSAM2:
         mask_annotator = sv.MaskAnnotator()
         annotated_frame = mask_annotator.annotate(scene=annotated_frame, detections=detections)
         cv2.imwrite(os.path.join(self.output_dir, "grounded_sam2_annotated_image_with_mask.jpg"), annotated_frame)
+
+        # Display the annotated frames
+        cv2.imshow('GroundingDINO Annotated Image', annotated_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
