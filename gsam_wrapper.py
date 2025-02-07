@@ -152,6 +152,10 @@ class GSAM2:
     
     def get_masks_image(self, object_names: str, image: Union[str, np.ndarray]):
         
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+
         if isinstance(image, str):
             image_source, image = load_image(image_path=image)
         else:
@@ -172,28 +176,32 @@ class GSAM2:
         input_boxes = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
 
         # FIXME: figure how does this influence the G-DINO model
-        torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+        torch.autocast(device_type="cuda", dtype=torch.float16).__enter__()
 
         if torch.cuda.get_device_properties(0).major >= 8:
             # turn on tfloat32 for Ampere GPUs (https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices)
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
 
-        masks, scores, logits = self.sam2_predictor.predict(
-            point_coords=None,
-            point_labels=None,
-            box=input_boxes,
-            multimask_output=False,
-        )
+        try: 
+            masks, scores, logits = self.sam2_predictor.predict(
+                point_coords=None,
+                point_labels=None,
+                box=input_boxes,
+                multimask_output=False,
+            )
+            if len(masks.shape) == 3:
+                masks = masks[np.newaxis, :]
 
-        if len(masks.shape) == 3:
-            masks = masks[np.newaxis, :]
+            if self.debug:
+                self.visualize_image(image_source, masks, scores, labels, input_boxes)
 
-        if self.debug:
-            self.visualize_image(image_source, masks, scores, labels, input_boxes)
-
-        return masks, scores, logits, confidences, labels, input_boxes
-    
+            return masks, scores, logits, confidences, labels, input_boxes
+        
+        except AssertionError as e:
+            print(f"GSAM 2 failed to generate masks for object: {object_names}")
+            print(f"AssertionError: {e}")
+            return None, None, None, None, None, None
 
     
     def first_n_unique_elements(self, strings, n=3):
@@ -347,11 +355,14 @@ class GSAM2:
         # Handle different input types for confidences
         if torch.is_tensor(confidences):
             confidences = confidences.cpu().numpy()
-        confidences = confidences.tolist()
+        confidences = np.ravel(confidences).tolist()
+
         class_names = labels
 
         class_ids = np.array(list(range(len(class_names))))
 
+        print("BLAAA")
+        print(class_names, confidences)
         labels = [
             f"{class_name} {confidence:.2f}"
             for class_name, confidence
